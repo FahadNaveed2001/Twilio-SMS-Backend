@@ -26,6 +26,7 @@ const routesWithoutToken = [
   "/callstatus",
   "/api/make-call",
   "/gather",
+  "/upload-excel",
 ];
 
 module.exports = { verifyToken, routesWithoutToken };

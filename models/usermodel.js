@@ -1,22 +1,53 @@
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
-  phone: {
+  firstName:{
+    type: String,
+  },
+  firstName:{
+    type: String,
+  },
+  phoneHome: {
+    type: String,
+  },
+  phoneOne: {
+    type: String,
+  },
+  phoneTwo: {
+    type: String,
+  },
+  phoneThree: {
+    type: String,
+  },
+  phoneFour: {
+    type: String,
+  },
+  phoneFive: {
+    type: String,
+  },
+  homeAddress:{
+    type: String,
+  },
+  state:{
+    type: String,
+  },
+  postalAddress:{
     type: Number,
-    required: true,
+  },
+  groupName:{
+    type: String,
   },
   status: {
     type: String,
-    required: true,
-    enum: ['Answered', 'Pending', 'Failed'],
-    // default: 'Pending',
+    // required: true,
+    enum: ['Answered', 'Pending', 'Failed', 'Unsubscribed'],
+    default: 'Pending',
   },
-  numberOfCall: {
+  numberOfMessages: {
     type: Number,
-    required: true,
-    default: 1,
+    default: 0,
   },
-  lastCalledAt: {
+  lastMessagedAt: {
     type: Date,
   },
   date: {
@@ -28,3 +59,5 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("Twilio-User", userSchema);
 module.exports = User;
+
+

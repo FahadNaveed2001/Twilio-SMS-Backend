@@ -7,7 +7,10 @@ const axios = require('axios');
 const bodyParser = require('body-parser');
 const moment = require('moment-timezone');
 const cron = require('node-cron');
-
+const multer = require("multer");
+const XLSX = require("xlsx");
+const path = require("path");
+const fs = require("fs");
 
 //files imports
 const connectDB = require("./config/mongoconnection");
@@ -43,6 +46,7 @@ app.use(
     credentials: true,
   })
 );
+const upload = multer({ dest: "uploads/" });
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -79,58 +83,71 @@ const twilioClient = twilio(
 );
 
 
+app.post("/upload-excel", upload.single("file"), async (req, res) => {
+  const filePath = req.file.path;
+  const { listName } = req.body;
+  try {
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    let jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      range: 1  
+    });
+    //  const expectedColumns = ["number", "companyName", "address", "location", "postalAddress"];
+    jsonData = jsonData.map(row => {
+      return {
+        firstName: row[0],         
+        lastName: row[1],
+        phoneHome: row[3],
+        phoneOne: row[2],
+        phoneTwo: row[4],
+        phoneThree: row[5],
+        phoneFour: row[6],
+        phoneFive: row[7],
+        homeAddress: row[8],
+        state: row[9],
+        postalAddress: row[10],
+        groupName: listName,
+      };
+    });
+   const users = await User.insertMany(jsonData);
+   //const jsonFilePath = path.join(__dirname, "output.json");
+   // fs.writeFileSync(jsonFilePath, JSON.stringify(jsonData, null, 2));
+    res.status(200).json({
+      status: "success",
+      message: "User saved successfully",
+      data: users,
+    });
+  } catch (error) {
+    console.error(`Failed to save users:`, error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to save users",
+      error: error.message,
+    });
+  } finally {
+    fs.unlinkSync(filePath);
+  }
+});
 
-
-// app.post("/api/make-call", async (req, res) => {
-//   try {
-//     const { phoneNumber } = req.body;
-//     if (!phoneNumber) {
-//       return res.status(400).json({
-//         status: "error",
-//         message: "Phone number dalo",
-//       });
-//     }
-
-//     try {
-//       const call = await client.calls.create({
-//         from: process.env.TWILIO_PHONE_NUMBER,
-//         to: phoneNumber,
-//         url: "http://demo.twilio.com/docs/voice.xml",
-//         statusCallback: "https://431c-154-192-30-63.ngrok-free.app/callstatus",
-//         statusCallbackMethod: "POST",
-//         statusCallbackEvent: ['answered', 'ringing', 'completed'],
-//       });
-//       console.log("Call initiated:", call.sid);
-//       res.status(200).json({
-//         status: "success",
-//         message: "Call initiated successfully",
-//         callSid: call.sid,
-//       });
-//     } catch (error) {
-//       console.error(`Failed to make call to ${phoneNumber}:`, error);
-//       res.status(500).json({
-//         status: "error",
-//         message: `Failed to make call to ${phoneNumber}`,
-//         error: error.message,
-//       });
-//     }
-//   } catch (error) {
-//     console.error("Error processing request:", error);
-//     res.status(500).json({
-//       status: "error",
-//       message: "Failed to process request",
-//       error: error.message,
-//     });
-//   }
-// });
 
 const getUserPhone = async (numberOfUsers) => {
   try {
-    const users = await User.find({ status: "Pending" }, "phone numberOfCall -_id")
-      .sort({ numberOfCall: 1 })
+    const users = await User.find({ status: "Pending" })
+      .sort({ numberOfMessages: 1 })
       .limit(numberOfUsers);
 
-    const phoneNumbers = users.map(user => user.phone);
+    const phoneNumbers = users.map(user => ({
+      userId: user._id, 
+      phoneHome: user.phoneHome,
+      phoneOne: user.phoneOne,
+      phoneTwo: user.phoneTwo,
+      phoneThree: user.phoneThree,
+      phoneFour: user.phoneFour,
+      phoneFive: user.phoneFive
+    }));
+
     console.log(phoneNumbers);
     return phoneNumbers;
   } catch (error) {
@@ -139,35 +156,113 @@ const getUserPhone = async (numberOfUsers) => {
   }
 };
 
+
 app.post("/send-sms", async (req, res) => {
-  const { toNumber } = req.body;
+  const { smsText } = req.body; 
 
   try {
-    // const currentDay = moment().startOf('day');
-    const settings = await smsSettings.findOne({ days: 4 });
-    if (!settings) {
-      throw new Error(`SMS not found for day ${currentDay}`);
+    if (!smsText) {
+      throw new Error("SMS text is required");
     }
-    const smsMessage = await twilioClient.messages.create({
-      body: settings.textMessage,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: toNumber
-    });
-    console.log(`SMS sent to ${toNumber}:`, smsMessage.sid);
+
+    const phoneNumbers = await getUserPhone();
+    for (const userPhones of phoneNumbers) {
+      let smsSent = false;
+      for (const phoneKey of Object.keys(userPhones)) {
+        const phoneNumber = userPhones[phoneKey];
+        if (phoneKey === "userId" || !phoneNumber) continue;
+    console.log("sending sms", phoneNumber)
+        try {
+          const smsMessage = await twilioClient.messages.create({
+            body: smsText,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: phoneNumber
+          });
+          console.log(`SMS sent to ${phoneNumber} for user ${userPhones.userId}:`, smsMessage.sid);
+          smsSent = true; 
+          break; 
+        } catch (error) {
+          console.error(`Failed to send SMS to ${phoneNumber} for user ${userPhones.userId}:`, error);
+        }
+      }
+
+      if (!smsSent) {
+        console.warn(`Failed to send SMS to all numbers for user ${userPhones.userId}`);
+        await User.updateOne({ _id: userPhones.userId }, { status: "Failed" });
+        continue;
+      }
+    }
+
     res.status(200).json({
       status: "success",
-      message: `SMS sent successfully to ${toNumber}`,
-      data: smsMessage,
+      message: "SMS sending process completed",
     });
   } catch (error) {
-    console.error(`Failed to send SMS to ${toNumber}:`, error);
+    console.error("Failed to send SMS:", error);
     res.status(500).json({
       status: "error",
-      message: `Failed to send SMS to ${toNumber}`,
+      message: "Failed to send SMS",
       error: error.message,
     });
   }
 });
+
+// const getUserPhone = async (numberOfUsers) => {
+//   try {
+//     const users = await User.find({ status: "Pending" })
+//       .sort({ numberOfMessages: 1 })
+//       .limit(numberOfUsers);
+
+//     const phoneNumbers = [];
+//     users.forEach(user => {
+//       phoneNumbers.push(
+//         user.phoneHome,
+//         user.phoneOne,
+//         user.phoneTwo,
+//         user.phoneThree,
+//         user.phoneFour,
+//         user.phoneFive
+//       );
+//     });
+
+//     console.log(phoneNumbers);
+//     return phoneNumbers;
+//   } catch (error) {
+//     console.error("Error fetching phone numbers:", error);
+//     throw new Error("Failed to fetch phone numbers");
+//   }
+// };
+
+
+// app.post("/send-sms", async (req, res) => {
+//   const { toNumber } = req.body;
+
+//   try {
+//     // const currentDay = moment().startOf('day');
+//     const settings = await smsSettings.findOne({ days: 4 });
+//     if (!settings) {
+//       throw new Error(`SMS not found for day ${currentDay}`);
+//     }
+//     const smsMessage = await twilioClient.messages.create({
+//       body: settings.textMessage,
+//       from: process.env.TWILIO_PHONE_NUMBER,
+//       to: toNumber
+//     });
+//     console.log(`SMS sent to ${toNumber}:`, smsMessage.sid);
+//     res.status(200).json({
+//       status: "success",
+//       message: `SMS sent successfully to ${toNumber}`,
+//       data: smsMessage,
+//     });
+//   } catch (error) {
+//     console.error(`Failed to send SMS to ${toNumber}:`, error);
+//     res.status(500).json({
+//       status: "error",
+//       message: `Failed to send SMS to ${toNumber}`,
+//       error: error.message,
+//     });
+//   }
+// });
 
 app.post("/callstatus", async (req, res) => {
   const callStatus = req.body.CallStatus;
