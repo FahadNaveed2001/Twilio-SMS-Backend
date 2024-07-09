@@ -3,13 +3,9 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const twilio = require('twilio');
-const axios = require('axios');
 const bodyParser = require('body-parser');
-const moment = require('moment-timezone');
-const cron = require('node-cron');
 const multer = require("multer");
 const XLSX = require("xlsx");
-const path = require("path");
 const fs = require("fs");
 
 //files imports
@@ -20,10 +16,9 @@ const {
 } = require("./middlewares/authmiddleware");
 const { userLogin } = require("./userroutes/userlogin");
 const User = require("./models/usermodel");
-// const Settings = require("./models/smssettingsmodal");
-const smsSettings = require("./models/smssettingsmodal");
-const callSettings = require("./models/callsettingsmodel");
-const callDaysSettings = require("./models/dayscountermodal");
+const { getUsers } = require("./userroutes/getusers");
+const { getGroupNames } = require("./userroutes/getgroupnames");
+
 //app and port
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -251,41 +246,11 @@ app.post("/admin-login", async (req, res) => {
 });
 
 app.get("/users", async (req, res) => {
-  try {
-    const users = await User.find();
-    res.status(200).json({
-      status: "success",
-      success: true,
-      message: "Twilio users fetched successfully",
-      Users: users,
-    });
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({
-      status: "error",
-      error: error.message,
-      message: "Failed to fetch users",
-    });
-  }
+  getUsers(req, res);
 });
 
 app.get('/all-groupnames', async (req, res) => {
-  try {
-    const users = await User.find({});
-    const groupNames = users.map(user => user.groupName);
-    const uniqueGroupNames = [...new Set(groupNames)];
-    res.status(200).json({
-      status: 'success',
-      uniqueGroupNames,
-    });
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error',
-      error: error.message,
-    });
-  }
+  getGroupNames(req, res);
 });
 
 //server
