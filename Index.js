@@ -250,46 +250,6 @@ app.post("/admin-login", async (req, res) => {
   userLogin(req, res);
 });
 
-app.post("/add-user", async (req, res) => {
-  try {
-    const { phone, status } = req.body;
-    let existingUser = await User.findOne({ phone });
-    if (existingUser) {
-      existingUser.status = status;
-      existingUser.numberOfCall += 1;
-      existingUser.date = Date.now();
-      await existingUser.save();
-      res.status(200).json({
-        status: "success",
-        success: true,
-        message: "User updated successfully",
-        data: existingUser,
-      });
-    } else {
-      const newUser = new User({
-        phone,
-        status,
-        numberOfCall: 0,
-        date: Date.now(),
-      });
-      await newUser.save();
-      res.status(201).json({
-        status: "success",
-        success: true,
-        message: "User added successfully",
-        data: newUser,
-      });
-    }
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      status: "error",
-      error: error.message,
-      message: "Internal server Eoor",
-    });
-  }
-});
-
 app.get("/users", async (req, res) => {
   try {
     const users = await User.find();
