@@ -94,6 +94,7 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
       header: 1,
       range: 1
     });
+    //  const expectedColumns = ["number", "companyName", "address", "location", "postalAddress"];
     jsonData = jsonData.map(row => {
       return {
         firstName: row[0],
@@ -107,12 +108,12 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
         homeAddress: row[8],
         state: row[9],
         postalAddress: row[10],
-        groupName: listName, 
+        groupName: listName,
       };
     });
-
     const users = await User.insertMany(jsonData);
-    fs.unlinkSync(filePath);
+    //const jsonFilePath = path.join(__dirname, "output.json");
+    // fs.writeFileSync(jsonFilePath, JSON.stringify(jsonData, null, 2));
     res.status(200).json({
       status: "success",
       message: "User saved successfully",
@@ -125,38 +126,16 @@ app.post("/upload-excel", upload.single("file"), async (req, res) => {
       message: "Failed to save users",
       error: error.message,
     });
+  } finally {
+    fs.unlinkSync(filePath);
   }
 });
 
 
-
-// const getUserPhone = async (numberOfUsers) => {
-//   try {
-//     // const users = await User.find({ status: "Pending" })
-//     const users = await User.find({ status: { $in: ["Pending", "Answered"] } })
-//       .sort({ numberOfMessages: 1 })
-//       .limit(numberOfUsers);
-
-//     const phoneNumbers = users.map(user => ({
-//       userId: user._id,
-//       phoneHome: user.phoneHome,
-//       phoneOne: user.phoneOne,
-//       phoneTwo: user.phoneTwo,
-//       phoneThree: user.phoneThree,
-//       phoneFour: user.phoneFour,
-//       phoneFive: user.phoneFive
-//     }));
-//     console.log(phoneNumbers);
-//     return phoneNumbers;
-//   } catch (error) {
-//     console.error("Error fetching phone numbers:", error);
-//     throw new Error("Failed to fetch phone numbers");
-//   }
-// };
-
-const getUserPhone = async (groupName, numberOfUsers) => {
+const getUserPhone = async (numberOfUsers) => {
   try {
-    const users = await User.find({ groupName: groupName })
+    // const users = await User.find({ status: "Pending" })
+    const users = await User.find({ status: { $in: ["Pending", "Answered"] } })
       .sort({ numberOfMessages: 1 })
       .limit(numberOfUsers);
 
@@ -169,7 +148,6 @@ const getUserPhone = async (groupName, numberOfUsers) => {
       phoneFour: user.phoneFour,
       phoneFive: user.phoneFive
     }));
-
     console.log(phoneNumbers);
     return phoneNumbers;
   } catch (error) {
@@ -177,67 +155,15 @@ const getUserPhone = async (groupName, numberOfUsers) => {
     throw new Error("Failed to fetch phone numbers");
   }
 };
-// app.post("/send-sms", async (req, res) => {
-//   const { smsText } = req.body;
-//   try {
-//     if (!smsText) {
-//       throw new Error("SMS text is required");
-//     }
-//     const phoneNumbers = await getUserPhone();
-//     for (const userPhones of phoneNumbers) {
-//       let smsSent = false;
-//       for (const phoneKey of Object.keys(userPhones)) {
-//         const phoneNumber = userPhones[phoneKey];
-//         if (phoneKey === "userId" || !phoneNumber) continue;
-//         try {
-//           const smsMessage = await twilioClient.messages.create({
-//             body: smsText,
-//             from: process.env.TWILIO_PHONE_NUMBER,
-//             to: phoneNumber
-//           });
-//           console.log(`SMS sent to ${phoneNumber} for user ${userPhones.userId}:`, smsMessage.sid);
-//           await User.updateOne(
-//             { _id: userPhones.userId },
-//             {
-//               $set: { lastMessagedAt: new Date() },
-//               $inc: { numberOfMessages: 1 }
-//             }
-//           );
-//           smsSent = true;
-//           break;
-//         } catch (error) {
-//           console.error(`Failed to send SMS to ${phoneNumber} for user ${userPhones.userId}:`, error);
-//         }
-//       }
 
-//       if (!smsSent) {
-//         console.warn(`Failed to send SMS to all numbers for user ${userPhones.userId}`);
-//         await User.updateOne({ _id: userPhones.userId }, { status: "Failed" });
-//         continue;
-//       }
-//     }
-
-//     res.status(200).json({
-//       status: "success",
-//       message: "SMS sending process completed",
-//     });
-//   } catch (error) {
-//     console.error("Failed to send SMS:", error);
-//     res.status(500).json({
-//       status: "error",
-//       message: "Failed to send SMS",
-//       error: error.message,
-//     });
-//   }
-// });
 
 app.post("/send-sms", async (req, res) => {
-  const { smsText, groupName } = req.body; 
+  const { smsText } = req.body;
   try {
-    if (!smsText || !groupName) {
-      throw new Error("SMS text and groupName are required");
+    if (!smsText) {
+      throw new Error("SMS text is required");
     }
-    const phoneNumbers = await getUserPhone(groupName); 
+    const phoneNumbers = await getUserPhone();
     for (const userPhones of phoneNumbers) {
       let smsSent = false;
       for (const phoneKey of Object.keys(userPhones)) {
@@ -253,10 +179,17 @@ app.post("/send-sms", async (req, res) => {
           await User.updateOne(
             { _id: userPhones.userId },
             {
-              $set: { lastMessagedAt: new Date() },
+              $set: { lastMessagedAt: new Date(), status: "Answered" },
               $inc: { numberOfMessages: 1 }
             }
           );
+          // await User.updateOne(
+          //   { _id: userPhones.userId },
+          //   {
+          //     lastMessagedAt: new Date(),
+          //     ...(userPhones.status === "Pending" && { status: "Answered" })
+          //   }
+          // );
           smsSent = true;
           break;
         } catch (error) {
@@ -284,6 +217,90 @@ app.post("/send-sms", async (req, res) => {
     });
   }
 });
+
+
+// const getUserPhone = async (numberOfUsers, statusFilter) => {
+//   try {
+//     const statusQuery = statusFilter === "Both" ? { $in: ["Pending", "Answered"] } : "Pending";
+//     const users = await User.find({ status: statusQuery })
+//       .sort({ numberOfMessages: 1 })
+//       .limit(numberOfUsers);
+
+//     const phoneNumbers = users.map(user => ({
+//       userId: user._id,
+//       phoneHome: user.phoneHome,
+//       phoneOne: user.phoneOne,
+//       phoneTwo: user.phoneTwo,
+//       phoneThree: user.phoneThree,
+//       phoneFour: user.phoneFour,
+//       phoneFive: user.phoneFive
+//     }));
+//     console.log(phoneNumbers);
+//     return phoneNumbers;
+//   } catch (error) {
+//     console.error("Error fetching phone numbers:", error);
+//     throw new Error("Failed to fetch phone numbers");
+//   }
+// };
+
+// app.post("/send-sms", async (req, res) => {
+//   const { smsText, statusFilter } = req.body;
+//   try {
+//     if (!smsText) {
+//       throw new Error("SMS text is required");
+//     }
+//     if (!["Pending", "Both"].includes(statusFilter)) {
+//       throw new Error("Invalid status filter. Must be 'Pending' or 'Both'");
+//     }
+
+//     const phoneNumbers = await getUserPhone(10, statusFilter); // Assuming you want to limit to 10 users
+//     for (const userPhones of phoneNumbers) {
+//       let smsSent = false;
+//       for (const phoneKey of Object.keys(userPhones)) {
+//         const phoneNumber = userPhones[phoneKey];
+//         if (phoneKey === "userId" || !phoneNumber) continue;
+//         try {
+//           const smsMessage = await twilioClient.messages.create({
+//             body: smsText,
+//             from: process.env.TWILIO_PHONE_NUMBER,
+//             to: phoneNumber
+//           });
+//           console.log(`SMS sent to ${phoneNumber} for user ${userPhones.userId}:`, smsMessage.sid);
+//           await User.updateOne(
+//             { _id: userPhones.userId },
+//             {
+//               $set: { lastMessagedAt: new Date(), status: "Answered" },
+//               $inc: { numberOfMessages: 1 }
+//             }
+//           );
+//           smsSent = true;
+//           break;
+//         } catch (error) {
+//           console.error(`Failed to send SMS to ${phoneNumber} for user ${userPhones.userId}:`, error);
+//         }
+//       }
+
+//       if (!smsSent) {
+//         console.warn(`Failed to send SMS to all numbers for user ${userPhones.userId}`);
+//         await User.updateOne({ _id: userPhones.userId }, { status: "Failed" });
+//       }
+//     }
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "SMS sending process completed",
+//     });
+//   } catch (error) {
+//     console.error("Failed to send SMS:", error);
+//     res.status(500).json({
+//       status: "error",
+//       message: "Failed to send SMS",
+//       error: error.message,
+//     });
+//   }
+// });
+
+
 
 app.post('/incoming-sms', async (req, res) => {
   const { From, Body } = req.body;
@@ -642,7 +659,20 @@ app.post("/gather", async (req, res) => {
 
 
 
-
+app.get("/numbers", async (req, res) => {
+  try {
+    const phoneNumbers = await getUserPhone();
+    res.status(200).json({
+      status: "success",
+      phoneNumbers: phoneNumbers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+});
 
 //admin login route
 app.post("/admin-login", async (req, res) => {
@@ -730,30 +760,206 @@ app.get("/pending-users", async (req, res) => {
 
 
 
-
-app.get('/all-groupnames', async (req, res) => {
+const updateCallDaysSettings = async () => {
   try {
-    const users = await User.find({});
-    const groupNames = users.map(user => user.groupName);
-    const uniqueGroupNames = [...new Set(groupNames)];
-    res.status(200).json({
-      status: 'success',
-      uniqueGroupNames,
+    const count = await smsSettings.countDocuments();
+    let existingSetting = await callDaysSettings.findOne({});
+    if (existingSetting) {
+      existingSetting.numberOfDaysToCalls = count;
+      await existingSetting.save();
+    } else {
+      const newSetting = new callDaysSettings({
+        numberOfDaysToCalls: count,
+      });
+      await newSetting.save();
+    }
+    // console.log(`${count}`);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+app.post("/api/add-sms", async (req, res) => {
+  try {
+    const { textMessage } = req.body;
+    const count = await smsSettings.countDocuments();
+    const newSettings = new smsSettings({
+      textMessage,
+      days: count + 1,
+    });
+    await newSettings.save();
+    res.status(201).json({
+      status: "success",
+      success: true,
+      message: "Settings added successfully",
+      data: newSettings,
     });
   } catch (error) {
-    console.error('Error fetching users:', error);
     res.status(500).json({
-      status: 'error',
-      message: 'Internal server error',
+      status: "error",
       error: error.message,
+      message: "Failed to add Settings",
     });
   }
 });
 
+app.put("/api/update-sms/:id", async (req, res) => {
+  const { id } = req.params;
+  const { textMessage } = req.body;
+  try {
+    let settings = await smsSettings.findById(id);
+    if (!settings) {
+      return res.status(404).json({
+        status: "error",
+        message: "SMS settings not found",
+      });
+    }
+    settings.textMessage = textMessage;
+    await settings.save();
 
+    res.status(200).json({
+      status: "success",
+      message: "SMS settings updated successfully",
+      data: settings,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      message: "Failed to update SMS settings",
+    });
+  }
+});
 
+app.get("/api/sms", async (req, res) => {
+  try {
+    const users = await smsSettings.find();
+    res.status(200).json({
+      status: "success",
+      success: true,
+      message: "Twilio Settings fetched successfully",
+      Settings: users,
+    });
+    await updateCallDaysSettings();
 
+  } catch (error) {
+    // console.error("Error fetching users:", error);
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      message: "Failed to fetch Settings",
+    });
+  }
+});
 
+app.delete("/api/sms/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deletedSetting = await smsSettings.findByIdAndDelete(id);
+    if (!deletedSetting) {
+      return res.status(404).json({
+        status: "error",
+        message: "SMS not found",
+      });
+    }
+    res.status(200).json({
+      status: "success",
+      message: "SMS deleted successfully",
+      // deletedSetting: deletedSetting,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      message: "Failed to delete SMS",
+    });
+  }
+});
+
+app.post("/api/add-call", async (req, res) => {
+  try {
+    const { numberOfCallsPerHour } = req.body;
+    const pendingUsersCount = await User.countDocuments({ status: 'Pending' });
+    if (numberOfCallsPerHour > pendingUsersCount) {
+      return res.status(400).json({
+        status: "error",
+        message: "Not enough pending users to add this number of calls",
+        pendingUsersCount: pendingUsersCount,
+      });
+    }
+    await callSettings.findOneAndDelete({});
+    const newSettings = new callSettings({
+      numberOfCallsPerHour: numberOfCallsPerHour,
+    });
+    await newSettings.save();
+
+    res.status(201).json({
+      status: "success",
+      success: true,
+      message: `Number of calls (${numberOfCallsPerHour}) added successfully.`,
+      data: newSettings,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      message: "Failed to add number of calls",
+    });
+  }
+});
+
+app.get("/api/call", async (req, res) => {
+  try {
+    const users = await callSettings.find();
+    res.status(200).json({
+      status: "success",
+      success: true,
+      message: "Twilio Call Settings fetched successfully",
+      Settings: users,
+    });
+  } catch (error) {
+    // console.error("Error fetching users:", error);
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      message: "Failed to fetch call Settings",
+    });
+  }
+});
+
+// app.post("/log-data", (req, res) => {
+//   console.log("Received data:", req.body);
+//   res.status(200).json({
+//     status: "success",
+//     success: true,
+//     message: "Data received and logged successfully",
+//     data: req.body,
+//   });
+// });
+
+// cron.schedule('*/3 * * * *', async () => {
+//   try {
+//     const { numberOfCallsPerHour } = await getCallSettings();
+//     const response = await axios.post('http://localhost:8000/api/make-call', {
+//       numberOfUsers: numberOfCallsPerHour,
+//     });
+//     console.log('Cron job executed successfully:', response.data);
+//   } catch (error) {
+//     console.error('Error running cron job:', error);
+//   }
+// });
+
+const getCallSettings = async () => {
+  try {
+    const settings = await callSettings.findOne();
+    if (!settings) {
+      throw new Error('Call settings not found in database');
+    }
+    return settings;
+  } catch (error) {
+    throw new Error(`Failed to fetch call settings: ${error.message}`);
+  }
+};
 
 
 

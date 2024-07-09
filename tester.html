@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upload Excel File</title>
+  <title>Upload File</title>
 </head>
 <body>
-  <h1>Upload Excel File</h1>
+  <h1>Upload File</h1>
   <form action="http://localhost:8000/upload-excel" method="post" enctype="multipart/form-data">
-    <label for="file">Select Excel File:</label>
+    <label for="file">File:</label>
     <input type="file" id="file" name="file" required />
     <br />
-    <label for="listName">Name:</label>
+    <label for="listName">List Name:</label>
     <input type="text" id="listName" name="listName" required />
     <br />
     <button type="submit">Upload</button>

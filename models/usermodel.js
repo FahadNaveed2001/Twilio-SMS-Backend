@@ -4,7 +4,7 @@ const userSchema = new mongoose.Schema({
   firstName:{
     type: String,
   },
-  firstName:{
+  lastName:{
     type: String,
   },
   phoneHome: {
@@ -40,7 +40,7 @@ const userSchema = new mongoose.Schema({
   status: {
     type: String,
     // required: true,
-    enum: ['Answered', 'Pending', 'Failed', 'Unsubscribed'],
+    enum: ['Pending', 'Failed', 'Unsubscribed'],
     default: 'Pending',
   },
   numberOfMessages: {
